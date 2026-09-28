@@ -1,0 +1,140 @@
+[
+  {
+    "id": 1,
+    "title": "Un-awaited MERN Async Database Query in Express Controller",
+    "filename": "checkoutController.js",
+    "code": "app.post('/checkout', (req, res) => {\n    const user = User.findById(req.body.userId);\n    res.json({ success: true, balance: user.balance });\n});",
+    "tier": "tier_1_direct",
+    "top1_class": "logic_error",
+    "top1_conf": 33.670979414974525,
+    "top3": [
+      [
+        "logic_error",
+        33.670979414974525
+      ],
+      [
+        "type_error",
+        23.716127326674645
+      ],
+      [
+        "security_vulnerability",
+        17.247300187801113
+      ]
+    ]
+  },
+  {
+    "id": 2,
+    "title": "React Component Unsafe Nested Object Property Access",
+    "filename": "UserProfileAvatar.jsx",
+    "code": "function UserAvatar(props) {\n    const avatarUrl = props.theme.header.userProfile.avatar.src;\n    return <img src={avatarUrl} alt=\"avatar\" />;\n}",
+    "tier": "tier_1_direct",
+    "top1_class": "security_vulnerability",
+    "top1_conf": 25.242543238334065,
+    "top3": [
+      [
+        "security_vulnerability",
+        25.242543238334065
+      ],
+      [
+        "logic_error",
+        24.766692106504358
+      ],
+      [
+        "type_error",
+        19.817273857184848
+      ]
+    ]
+  },
+  {
+    "id": 3,
+    "title": "Express NoSQL Operator Injection Vulnerability",
+    "filename": "authRoute.js",
+    "code": "app.post('/api/login', async (req, res) => {\n    const user = await db.collection('users').findOne({\n        username: req.body.username,\n        password: req.body.password\n    });\n    res.json(user);\n});",
+    "tier": "tier_1_direct",
+    "top1_class": "async_error",
+    "top1_conf": 77.77884177930403,
+    "top3": [
+      [
+        "async_error",
+        77.77884177930403
+      ],
+      [
+        "type_error",
+        3.9323700082894355
+      ],
+      [
+        "logic_error",
+        3.8148756760381812
+      ]
+    ]
+  },
+  {
+    "id": 4,
+    "title": "Pagination Off-by-One Slice Boundary Index Overrun",
+    "filename": "paginationUtils.ts",
+    "code": "function getPageItems(items, pageIndex, pageSize) {\n    const start = pageIndex * pageSize;\n    const end = start + pageSize + 1;\n    return items.slice(start, end);\n}",
+    "tier": "tier_1_direct",
+    "top1_class": "logic_error",
+    "top1_conf": 30.49212357016945,
+    "top3": [
+      [
+        "logic_error",
+        30.49212357016945
+      ],
+      [
+        "security_vulnerability",
+        18.62017576896448
+      ],
+      [
+        "type_error",
+        17.22894547417745
+      ]
+    ]
+  },
+  {
+    "id": 5,
+    "title": "Unclosed MongoDB Connection Socket Leak",
+    "filename": "reportExporter.js",
+    "code": "async function exportReport() {\n    const client = await MongoClient.connect(process.env.DB_URI);\n    const data = await client.db('analytics').collection('events').find().toArray();\n    return data;\n}",
+    "tier": "tier_1_direct",
+    "top1_class": "async_error",
+    "top1_conf": 78.60704081683616,
+    "top3": [
+      [
+        "async_error",
+        78.60704081683616
+      ],
+      [
+        "type_error",
+        4.55468205604264
+      ],
+      [
+        "logic_error",
+        3.6031117366765835
+      ]
+    ]
+  },
+  {
+    "id": 6,
+    "title": "React Hook Stale Closure inside Interval",
+    "filename": "AutoSaverHook.tsx",
+    "code": "function AutoSaver({ data }) {\n    useEffect(() => {\n        const id = setInterval(() => {\n            saveToServer(data);\n        }, 5000);\n        return () => clearInterval(id);\n    }, []);\n}",
+    "tier": "tier_1_direct",
+    "top1_class": "type_error",
+    "top1_conf": 34.190106682804924,
+    "top3": [
+      [
+        "type_error",
+        34.190106682804924
+      ],
+      [
+        "logic_error",
+        33.556032177351376
+      ],
+      [
+        "security_vulnerability",
+        10.268017372393551
+      ]
+    ]
+  }
+]

@@ -1,0 +1,140 @@
+# SYSTEM SPECIFICATION PROMPT: CODE-RAG BUG TRACKER & REPAIR APP (MERN-FASTAPI HYBRID)
+
+## 1. PROJECT OVERVIEW & ARCHITECTURE
+You are building an industrial-grade, AI-driven Bug Detection and Automated Program Repair web application named "BugIdentifier". 
+The core engine shifts the bug detection paradigm from a blind textual machine learning classifier (which suffers from semantic signal starvation and vector overlapping) to a structural, Comparison-Based "Error Mining" / Retrieval-Augmented Generation (RAG) system.
+
+### Core Stack Requirements:
+- **Frontend UI**: React.js (Vite, TailwindCSS, Lucide Icons, and Monaco Editor for code views).
+- **Backend API Gateway & Agent Core**: FastAPI (Python 3.12) & LangChain (v0.2+).
+- **Database & Vector Store**: MongoDB Atlas (acting as both the metadata database and the Vector Store via Atlas Vector Search).
+- **Code Parsing Engine**: Babel Parser / Esprima (via a fast Node.js script spawned by FastAPI, or integrated python-babel-parser) to slice JS/TS code into AST-parsed methods.
+
+---
+
+## 2. THE PIPELINE ENGINE (ARCHITECTURAL BLUEPRINT)
+Build the codebase according to the following 11-step architectural flow (modeled on the system blueprint):
+
+1. **INPUT PORTAL**: 
+   - Accept either a GitHub Repository URL or an uploaded ZIP file containing a JS/TS project.
+2. **PROJECT ANALYSIS**: 
+   - Clone/extract the project into an ephemeral directory, analyze project structure, and map local folder/dependency hierarchies.
+3. **FILE SELECTION**: 
+   - Walk the directory and filter out only relevant source files (`.js`, `.jsx`, `.ts`, `.tsx`). Exclude `node_modules`, build targets, and configuration files.
+4. **CODE PARSING (AST)**: 
+   - Parse each selected file into an Abstract Syntax Tree (AST) using a Babel parser to locate clean, syntactic method boundaries.
+5. **CODE SLICING**: 
+   - Slice files into standalone, independent method/function-level code chunks.
+6. **FEATURE LAYER (HYBRID COGNITION)**:
+   - For each sliced code chunk, generate:
+     - **AST Vectors (120-D)**: A structural representation capturing local tree geometry.
+     - **Pretrained Embeddings**: Dense vector representations of the code sequence (using `text-embedding-3-small` or `codebert-base` embeddings).
+     - **Static Analysis Features**: Compute static metrics (Cyclomatic Complexity, line counts, dependency lists).
+7. **ML BUG DETECTOR (RETRIEVAL GATEKEEPER)**:
+   - Instead of a traditional binary classifier (which has an unreliable AUC of ~0.52 in isolation), use the vector representation to perform a similarity lookup against the database of historical bug-fix commits (your "Delta Dataset").
+   - **Learned Confidence Filter**:
+     - `Similarity Score < 0.80`: Classify as Clean (Cost: \$0.00, do not send to LLM).
+     - `Similarity Score >= 0.80`: Flag as Suspicious, extract metadata, and pass to the LLM verification gate.
+8. **EVIDENCE EXTRACTION (HISTORICAL DATASET)**:
+   - When similarity hits the threshold, retrieve the following linked records from MongoDB:
+     - The matching historical **Buggy Code ("Before" Commit)**.
+     - The matching historical **Fixed Code ("After" Commit)**.
+     - **The pre-computed Delta Signature** (e.g., `added_boundary_check = 1`, `added_await = 0`, `delta_op_gt = -1`) representing the transformation DNA of the original repair.
+9. **LANGCHAIN AGENT VERIFICATION & REPAIR**:
+   - Construct a Few-Shot In-Context Learning prompt inside LangChain:
+     - Feed the LLM (GPT-4o) the retrieved Buggy Code, Fixed Code, and the Delta Signature as an explicit transformation blueprint.
+     - Ask the LLM to verify if the user's Suspicious Code contains the same underlying bug. If yes, generate the specific structural patch.
+10. **JSON OUTBOX ENCAPSULATION**:
+    - Return a clean, verified JSON schema detailing: file path, start/end lines, bug category, severity level, technical explanation, and the side-by-side patch code.
+11. **RESULTS WEB APP DISPLAY**:
+    - Present the findings to the developer in an interactive dashboard.
+
+---
+
+## 3. DATABASE SCHEMAS (MONGODB)
+
+### Schema: `HistoricalBugFix` (The Delta Dataset Index)
+```json
+{
+  "_id": "ObjectId",
+  "commit_id": "String",
+  "commit_message": "String",
+  "project_name": "String",
+  "buggy_code_chunk": "String",
+  "fixed_code_chunk": "String",
+  "ast_vector_120d": "Array[Double]",
+  "vector_embedding": "Array[Double]", 
+  "delta_signature": {
+    "added_boundary_check": "Integer",
+    "added_await": "Integer",
+    "delta_op_gt": "Integer",
+    "complexity_delta": "Integer"
+  },
+  "metadata": {
+    "language": "String",
+    "api_calls": "Array[String]"
+  }
+}
+Schema: ScanResult
+{
+  "_id": "ObjectId",
+  "scan_timestamp": "Date",
+  "repository_url": "String",
+  "status": "String",
+  "files_scanned": "Integer",
+  "vulnerabilities": [
+    {
+      "file_path": "String",
+      "method_name": "String",
+      "line_number_start": "Integer",
+      "line_number_end": "Integer",
+      "bug_type": "String",
+      "severity_level": "String", // Critical, Major, Minor
+      "explanation": "String",
+      "buggy_code_highlighted": "String",
+      "suggested_fix_code": "String",
+      "matched_historical_commit": "String" // Link to the original GitHub fix
+    }
+  ]
+}
+4. BACKEND ENDPOINTS (FASTAPI & LANGCHAIN)
+Provide these exact API endpoints in FastAPI:
+POST /api/scan/repository: Accepts a Git URL or uploaded zip. Triggers project checkout, Babel parser slicing, vector lookups in MongoDB, and LangChain orchestration. Returns a scan_id.
+GET /api/scan/results/{scan_id}: Retrieves the detailed list of suspicious files, extracted methods, confidence scores, and LLM generated side-by-side code diffs.
+GET /api/dataset/stats: Returns analytics on your mined Delta dataset (number of commits indexed, common API signatures, etc.).
+Essential LangChain Few-Shot Prompt Template:
+from langchain_core.prompts import ChatPromptTemplate
+
+system_prompt = """
+You are a elite code analyzer and automated program repair assistant. 
+Your task is to semantic-verify if the user's uploaded target code contains a software bug and provide a patch.
+
+You are provided with a historical bug and its corresponding fix as a references:
+### HISTORICAL BUGGY REFERENCE:
+{historical_bug}
+
+### HISTORICAL FIXED REFERENCE:
+{historical_fix}
+
+### STRUCTURAL DELTA TRANSFORMATION BLUEPRINT:
+{delta_signature}
+
+### TARGET CODE TO ANALYSE:
+{target_code}
+
+Using the historical blueprint as a reference transformation pattern, analyze the target code. If the bug is present, generate a clean, refactored version of the code that resolves the defect. Keep the code style, variables, and structure identical except for the specific bug patch.
+"""
+5. FRONTEND INTERACTIVE UI (REACT & TAILWIND)
+Build a clean dashboard focusing on high-quality UX/UI, specifically resolving traditional UI bottlenecks (bad button placement, lack of asterisks, lack of loading transparency):
+The Git Portal: A simple form with a Git URL input box. Every required input field MUST be clearly labeled with a red asterisk (*). The "Analyze Repository" action button must be placed at the bottom-right of the form container.
+Scanning State (Real-Time Spinner): Display a transparent progress logger during compilation/AST search (e.g., "Step 4/11: Parsing files into Abstract Syntax Trees...", "Step 7/11: Running Local Delta-RAG Matching...").
+Interactive Vulnerability Explorer:
+Left panel: A tree list of files flagged with bugs, grouped by severity (Critical in red, Major in orange, Minor in yellow).
+Center workspace: Monaco Editor showing the user's original method code side-by-side with the suggested LangChain repair, with changes highlighted.
+Right panel: Transparent explanation card showing the original git commit message of the matched bug from your Delta dataset, and the developer explanations. Includes action buttons at the bottom-right of the card: "Accept and Apply Patch" and "Share Diagnostic Report".
+***
+
+### Why this is a superior design for your project:
+1. **Explainable AI**: Your UI displays the actual historical commit message that matched the bug [5/175, 9/323]. This builds immediate trust with developers because they can see *why* the code was flagged.
+2. **Mitigates Hallucinations**: Standard LLMs often fail to fix bugs when analyzing standalone methods [4/153]. Feeding the pre-calculated structural **Delta Signatures** directly instructs the model on the exact transformation pattern it needs to execute [4/150, 7/253].
+3. **Optimized API Billing**: By filtering out healthy code blocks locally using vector retrieval and learned confidence thresholds before sending them to LangChain, your API consumption costs drop significantly [2/36, 9/336].

@@ -1,0 +1,38 @@
+{
+  "text_sgd": {
+    "accuracy": 0.4447,
+    "f1_macro": 0.3717
+  },
+  "text_linear_svc": {
+    "accuracy": 0.4367,
+    "f1_macro": 0.3612
+  },
+  "text_logistic": {
+    "accuracy": 0.469,
+    "f1_macro": 0.381
+  },
+  "ast_random_forest": {
+    "accuracy": 0.3895,
+    "f1_macro": 0.26
+  },
+  "ast_sgd": {
+    "accuracy": 0.0795,
+    "f1_macro": 0.0507
+  },
+  "ast_logistic": {
+    "accuracy": 0.1334,
+    "f1_macro": 0.0769
+  },
+  "hybrid_sgd": {
+    "accuracy": 0.4528,
+    "f1_macro": 0.3739
+  },
+  "hybrid_logistic": {
+    "accuracy": 0.4784,
+    "f1_macro": 0.3867
+  },
+  "hybrid_random_forest": {
+    "accuracy": 0.4447,
+    "f1_macro": 0.3671
+  }
+}

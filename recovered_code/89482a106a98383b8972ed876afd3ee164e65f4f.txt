@@ -1,0 +1,10 @@
+{
+  "name": "bugidentifier-ast-parser",
+  "version": "1.0.0",
+  "description": "Babel AST code parser and function slicer for BugIdentifier",
+  "main": "ast_parser.js",
+  "dependencies": {
+    "@babel/parser": "^7.26.9",
+    "@babel/traverse": "^7.26.9"
+  }
+}

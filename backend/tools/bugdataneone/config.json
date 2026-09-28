@@ -1,0 +1,43 @@
+{
+  "input_dataset": "dataset.csv",
+  "output_dataset": "dataset_enriched.csv",
+  "checkpoint_file": "checkpoint.json",
+  "batch_size": 1,
+  "model_name": "gemini-2.0-flash",
+  "temperature": 0.1,
+  "approved_bug_types": [
+    "async_error",
+    "null_pointer",
+    "logic_error",
+    "type_error",
+    "api_misuse",
+    "security_vulnerability",
+    "off_by_one",
+    "exception_handling",
+    "resource_leak",
+    "performance_issue",
+    "input_validation",
+    "state_management"
+  ],
+  "approved_components": [
+    "frontend",
+    "backend",
+    "database",
+    "network",
+    "authentication",
+    "authorization",
+    "storage",
+    "api",
+    "ui",
+    "filesystem",
+    "configuration",
+    "build_system",
+    "unknown"
+  ],
+  "approved_severities": [
+    "low",
+    "medium",
+    "high",
+    "critical"
+  ]
+}

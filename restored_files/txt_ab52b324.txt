@@ -1,0 +1,21 @@
+# =============================================================================
+# BugIdentifier Environment Configuration
+# =============================================================================
+
+# --- LLM API Keys (Set at least one for LangChain AI Agent) ---
+# Google Gemini API Key (Recommended): https://aistudio.google.com/
+GEMINI_API_KEY=YOUR_GCP_API_KEY_PLACEHOLDER
+GOOGLE_API_KEY=
+
+# OpenAI API Key (Alternative): https://platform.openai.com/api-keys
+OPENAI_API_KEY=
+
+# --- Database Configuration ---
+# Optional: MongoDB Atlas connection string for cloud persistence & Atlas Vector Search
+# If left empty, the application automatically uses the high-speed Local Hybrid Vector Index!
+MONGODB_URI=
+MONGODB_DB_NAME=bugidentifier_db
+
+# --- Pipeline Configuration ---
+SIMILARITY_THRESHOLD=0.80
+PORT=8000

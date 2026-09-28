@@ -1,0 +1,32 @@
+{
+  "rf_class": {
+    "accuracy": 0.5442,
+    "macro_f1": 0.3681,
+    "weighted_f1": 0.5434
+  },
+  "extra_trees_class": {
+    "accuracy": 0.4644,
+    "macro_f1": 0.3081,
+    "weighted_f1": 0.4619
+  },
+  "sgd_class": {
+    "accuracy": 0.3333,
+    "macro_f1": 0.1323,
+    "weighted_f1": 0.2846
+  },
+  "rf_severity": {
+    "accuracy": 0.7749,
+    "macro_f1": 0.5294,
+    "weighted_f1": 0.7157
+  },
+  "extra_trees_severity": {
+    "accuracy": 0.7664,
+    "macro_f1": 0.5507,
+    "weighted_f1": 0.7213
+  },
+  "sgd_severity": {
+    "accuracy": 0.5641,
+    "macro_f1": 0.4155,
+    "weighted_f1": 0.589
+  }
+}

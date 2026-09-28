@@ -1,0 +1,264 @@
+const fs = require('fs');
+const parser = require('@babel/parser');
+const traverse = require('@babel/traverse').default;
+
+const AST_NODE_TYPES = [
+  'FunctionDeclaration', 'FunctionExpression', 'ArrowFunctionExpression', 'ClassMethod', 'ObjectMethod',
+  'Identifier', 'Literal', 'StringLiteral', 'NumericLiteral', 'BooleanLiteral', 'NullLiteral',
+  'VariableDeclaration', 'VariableDeclarator', 'AssignmentExpression', 'BinaryExpression',
+  'LogicalExpression', 'UnaryExpression', 'UpdateExpression', 'MemberExpression',
+  'CallExpression', 'NewExpression', 'SequenceExpression', 'ConditionalExpression',
+  'IfStatement', 'SwitchStatement', 'SwitchCase', 'ForStatement', 'ForInStatement', 'ForOfStatement',
+  'WhileStatement', 'DoWhileStatement', 'BreakStatement', 'ContinueStatement', 'ReturnStatement',
+  'TryStatement', 'CatchClause', 'ThrowStatement', 'AwaitExpression', 'YieldExpression',
+  'ArrayExpression', 'ObjectExpression', 'ObjectProperty', 'SpreadElement', 'RestElement',
+  'BlockStatement', 'ExpressionStatement', 'TemplateLiteral', 'TaggedTemplateExpression',
+  'JSXElement', 'JSXOpeningElement', 'JSXClosingElement', 'JSXAttribute', 'JSXText', 'JSXExpressionContainer',
+  'ThisExpression', 'Super', 'ImportDeclaration', 'ExportNamedDeclaration', 'ExportDefaultDeclaration',
+  'TSAsExpression', 'TSTypeAnnotation', 'TSInterfaceDeclaration', 'TSTypeAliasDeclaration'
+];
+
+function parseCode(sourceCode, filepath = 'sample.js') {
+  const isTs = filepath.endsWith('.ts') || filepath.endsWith('.tsx');
+  const isJsx = filepath.endsWith('.jsx') || filepath.endsWith('.tsx') || true;
+
+  const plugins = [
+    'asyncGenerators',
+    'classProperties',
+    'classPrivateProperties',
+    'classPrivateMethods',
+    'dynamicImport',
+    'exportDefaultFrom',
+    'exportNamespaceFrom',
+    'nullishCoalescingOperator',
+    'numericSeparator',
+    'objectRestSpread',
+    'optionalCatchBinding',
+    'optionalChaining',
+    ['decorators', { decoratorsBeforeExport: true }]
+  ];
+
+  if (isTs) plugins.push('typescript');
+  if (isJsx) plugins.push('jsx');
+
+  try {
+    const ast = parser.parse(sourceCode, {
+      sourceType: 'unambiguous',
+      allowReturnOutsideFunction: true,
+      allowImportExportEverywhere: true,
+      allowAwaitOutsideFunction: true,
+      plugins: plugins,
+      errorRecovery: true
+    });
+    return ast;
+  } catch (err) {
+    // Fallback simple parsing
+    try {
+      return parser.parse(sourceCode, {
+        sourceType: 'module',
+        plugins: ['jsx', 'typescript'],
+        errorRecovery: true
+      });
+    } catch (fallbackErr) {
+      return null;
+    }
+  }
+}
+
+function computeMethodMetrics(astNode, sourceCode, lines) {
+  const counts = {};
+  AST_NODE_TYPES.forEach(t => counts[t] = 0);
+  let complexity = 1;
+  let maxDepth = 0;
+
+  function walk(node, depth = 0) {
+    if (!node || typeof node !== 'object') return;
+    if (depth > maxDepth) maxDepth = depth;
+    if (node.type) {
+      if (counts[node.type] !== undefined) {
+        counts[node.type]++;
+      }
+      if (['IfStatement', 'ConditionalExpression', 'SwitchCase', 'WhileStatement', 'ForStatement', 'ForInStatement', 'ForOfStatement', 'CatchClause', 'LogicalExpression'].includes(node.type)) {
+        complexity++;
+      }
+    }
+    for (const key of Object.keys(node)) {
+      if (key === 'loc' || key === 'start' || key === 'end' || key === 'leadingComments' || key === 'trailingComments') continue;
+      const child = node[key];
+      if (Array.isArray(child)) {
+        child.forEach(c => walk(c, depth + 1));
+      } else if (child && typeof child === 'object') {
+        walk(child, depth + 1);
+      }
+    }
+  }
+
+  walk(astNode);
+
+  // Form a fixed 64-D / 120-D vector
+  const vector = AST_NODE_TYPES.map(t => counts[t]);
+  while (vector.length < 64) vector.push(0);
+
+  return {
+    vector,
+    complexity,
+    maxDepth,
+    nodeCounts: counts
+  };
+}
+
+function sliceMethods(sourceCode, filepath = 'code.js') {
+  const ast = parseCode(sourceCode, filepath);
+  const lines = sourceCode.split('\n');
+  const methods = [];
+
+  if (!ast) {
+    // Fallback: treat entire file as single chunk
+    return [{
+      method_name: 'anonymous_module',
+      line_number_start: 1,
+      line_number_end: lines.length,
+      code: sourceCode,
+      ast_vector: new Array(64).fill(0),
+      complexity: 1,
+      max_depth: 1
+    }];
+  }
+
+  try {
+    traverse(ast, {
+      FunctionDeclaration(path) {
+        const name = path.node.id ? path.node.id.name : 'anonymous';
+        const start = path.node.loc ? path.node.loc.start.line : 1;
+        const end = path.node.loc ? path.node.loc.end.line : lines.length;
+        const code = lines.slice(start - 1, end).join('\n');
+        const metrics = computeMethodMetrics(path.node, sourceCode, lines);
+        methods.push({
+          method_name: name,
+          line_number_start: start,
+          line_number_end: end,
+          code,
+          ast_vector: metrics.vector,
+          complexity: metrics.complexity,
+          max_depth: metrics.maxDepth
+        });
+      },
+      FunctionExpression(path) {
+        if (path.parent.type === 'VariableDeclarator' || path.parent.type === 'AssignmentExpression' || path.parent.type === 'ClassProperty') {
+          const name = path.parent.id ? path.parent.id.name : (path.parent.key ? path.parent.key.name : 'anonymous');
+          const start = path.node.loc ? path.node.loc.start.line : 1;
+          const end = path.node.loc ? path.node.loc.end.line : lines.length;
+          const code = lines.slice(start - 1, end).join('\n');
+          const metrics = computeMethodMetrics(path.node, sourceCode, lines);
+          methods.push({
+            method_name: name,
+            line_number_start: start,
+            line_number_end: end,
+            code,
+            ast_vector: metrics.vector,
+            complexity: metrics.complexity,
+            max_depth: metrics.maxDepth
+          });
+        }
+      },
+      ArrowFunctionExpression(path) {
+        if (path.parent.type === 'VariableDeclarator' || path.parent.type === 'AssignmentExpression' || path.parent.type === 'ExportDefaultDeclaration') {
+          const name = path.parent.id ? path.parent.id.name : 'arrowFunction';
+          const start = path.node.loc ? path.node.loc.start.line : 1;
+          const end = path.node.loc ? path.node.loc.end.line : lines.length;
+          const code = lines.slice(start - 1, end).join('\n');
+          const metrics = computeMethodMetrics(path.node, sourceCode, lines);
+          methods.push({
+            method_name: name,
+            line_number_start: start,
+            line_number_end: end,
+            code,
+            ast_vector: metrics.vector,
+            complexity: metrics.complexity,
+            max_depth: metrics.maxDepth
+          });
+        }
+      },
+      ClassMethod(path) {
+        const name = path.node.key ? (path.node.key.name || 'method') : 'method';
+        const start = path.node.loc ? path.node.loc.start.line : 1;
+        const end = path.node.loc ? path.node.loc.end.line : lines.length;
+        const code = lines.slice(start - 1, end).join('\n');
+        const metrics = computeMethodMetrics(path.node, sourceCode, lines);
+        methods.push({
+          method_name: name,
+          line_number_start: start,
+          line_number_end: end,
+          code,
+          ast_vector: metrics.vector,
+          complexity: metrics.complexity,
+          max_depth: metrics.maxDepth
+        });
+      },
+      ObjectMethod(path) {
+        const name = path.node.key ? (path.node.key.name || 'method') : 'method';
+        const start = path.node.loc ? path.node.loc.start.line : 1;
+        const end = path.node.loc ? path.node.loc.end.line : lines.length;
+        const code = lines.slice(start - 1, end).join('\n');
+        const metrics = computeMethodMetrics(path.node, sourceCode, lines);
+        methods.push({
+          method_name: name,
+          line_number_start: start,
+          line_number_end: end,
+          code,
+          ast_vector: metrics.vector,
+          complexity: metrics.complexity,
+          max_depth: metrics.maxDepth
+        });
+      }
+    });
+  } catch (traverseErr) {
+    // Traverse issue fallback
+  }
+
+  // If no specific methods were extracted (e.g. top-level component or script), slice entire body
+  if (methods.length === 0 && sourceCode.trim().length > 0) {
+    const metrics = computeMethodMetrics(ast, sourceCode, lines);
+    methods.push({
+      method_name: 'root_block',
+      line_number_start: 1,
+      line_number_end: lines.length,
+      code: sourceCode,
+      ast_vector: metrics.vector,
+      complexity: metrics.complexity,
+      max_depth: metrics.maxDepth
+    });
+  }
+
+  return methods;
+}
+
+// Read stdin or file argument
+let inputData = '';
+process.stdin.setEncoding('utf-8');
+
+process.stdin.on('data', chunk => {
+  inputData += chunk;
+});
+
+process.stdin.on('end', () => {
+  try {
+    if (!inputData.trim()) {
+      if (process.argv[2] && fs.existsSync(process.argv[2])) {
+        inputData = JSON.stringify({
+          code: fs.readFileSync(process.argv[2], 'utf-8'),
+          filepath: process.argv[2]
+        });
+      } else {
+        console.log(JSON.stringify([]));
+        return;
+      }
+    }
+    const payload = JSON.parse(inputData);
+    const results = sliceMethods(payload.code, payload.filepath || 'file.js');
+    console.log(JSON.stringify(results));
+  } catch (err) {
+    console.error(err);
+    console.log(JSON.stringify([]));
+  }
+});

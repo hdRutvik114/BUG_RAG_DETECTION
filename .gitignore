@@ -1,0 +1,14 @@
+.env
+__pycache__/
+*.pyc
+node_modules/
+**/node_modules/
+dist/
+**/dist/
+*.timestamp-*.mjs
+temp_scans/
+.vscode/
+
+
+# Backup bundle
+git_backup.bundle

@@ -1,0 +1,343 @@
+# Bug Dataset Enrichment Specification
+
+## Objective
+
+Improve the quality of the existing bug-fix dataset for training Machine Learning models for:
+
+* Bug Detection
+* Bug Classification
+* Severity Prediction
+
+The existing dataset already contains records.
+
+Do NOT create synthetic records.
+
+Do NOT delete existing records.
+
+Every existing record must be analyzed and improved.
+
+---
+
+## Input Fields
+
+The dataset may contain:
+
+* repository
+* file_path
+* language
+* commit_message
+* buggy_code
+* fixed_code
+* bug_type
+* description
+
+Field names may vary slightly.
+
+The pipeline should automatically detect equivalent columns.
+
+---
+
+## Primary Goal
+
+Many records currently contain:
+
+* vague bug types
+* incorrect bug types
+* overuse of "other"
+* poor descriptions
+* missing root cause information
+
+The objective is to generate higher quality labels and descriptions.
+
+---
+
+## Source of Truth
+
+When determining bug information:
+
+Priority:
+
+1. buggy_code vs fixed_code diff
+2. commit message
+3. existing bug_type
+4. existing description
+
+Never rely only on the commit message.
+
+The code change is the primary source of truth.
+
+---
+
+## Approved Bug Taxonomy
+
+Use ONLY the following categories:
+
+[
+"null_pointer",
+"type_error",
+"logic_error",
+"async_error",
+"api_misuse",
+"security_vulnerability",
+"performance_issue",
+"memory_issue",
+"resource_leak",
+"exception_handling",
+"input_validation",
+"concurrency_issue",
+"state_management",
+"configuration_error",
+"dependency_issue",
+"syntax_error",
+"data_validation",
+"off_by_one",
+"race_condition",
+"authentication_issue",
+"authorization_issue",
+"serialization_issue",
+"network_error",
+"file_handling",
+"database_error",
+"ui_bug",
+"other"
+]
+
+---
+
+## Reclassification Rules
+
+If the current bug_type is:
+
+* "other"
+* vague
+* inconsistent
+* obviously incorrect
+
+then replace it with the most accurate category.
+
+Avoid assigning "other" unless no suitable category exists.
+
+The goal is to minimize the number of records classified as "other".
+
+---
+
+## Generate New Columns
+
+Create the following columns.
+
+### bug_type
+
+The corrected bug category.
+
+### bug_description
+
+20-60 words.
+
+Must explain:
+
+* what the bug is
+* why it matters
+* what impact it causes
+
+Avoid generic wording.
+
+---
+
+### root_cause
+
+One concise technical explanation describing why the bug exists.
+
+Examples:
+
+* Missing null validation
+* Incorrect API usage
+* Improper state synchronization
+* Unsafe type conversion
+
+---
+
+### fix_description
+
+Explain:
+
+* what changed
+* how the fix resolves the issue
+
+---
+
+### severity
+
+Allowed values:
+
+[
+"low",
+"medium",
+"high",
+"critical"
+]
+
+Severity Guidelines:
+
+critical:
+
+* authentication bypass
+* privilege escalation
+* severe security vulnerabilities
+* data corruption
+
+high:
+
+* crashes
+* service failures
+* major logic defects
+
+medium:
+
+* incorrect functionality
+* recoverable runtime errors
+
+low:
+
+* minor performance issues
+* cosmetic fixes
+* maintainability improvements
+
+---
+
+### bug_pattern
+
+Short pattern name.
+
+Examples:
+
+* Missing Null Check
+* Invalid State Transition
+* Missing Await
+* Race Condition
+* Unsafe Type Cast
+* Incorrect API Call
+
+---
+
+### affected_component
+
+One of:
+
+[
+"frontend",
+"backend",
+"database",
+"network",
+"authentication",
+"authorization",
+"storage",
+"api",
+"ui",
+"filesystem",
+"configuration",
+"build_system",
+"unknown"
+]
+
+---
+
+### confidence_score
+
+Range:
+
+0.00 - 1.00
+
+Represents confidence in the generated classification.
+
+---
+(hey use the only the main columns only and create another dataset as when the process is being done evrytime an append the other columns with respect to that row or col ...)
+
+
+## Output Quality Requirements
+
+Before returning any record:
+
+Verify:
+
+1. bug_type matches code diff.
+2. severity matches impact.
+3. description matches bug.
+4. root cause matches defect.
+5. fix description matches code changes.
+6. generated text is technically accurate.
+7. generated text is not generic.
+
+---
+
+## Processing Strategy
+
+Process records independently.
+
+Never skip records.
+
+Save progress after each batch.
+
+Support resuming from checkpoints.
+
+Handle API failures gracefully.
+ask the user to put the api key of diff models for if it hits the rate limit.. as a handling .
+
+Validate JSON responses before writing results.
+
+---
+
+## Output Dataset
+
+Preserve all original columns.
+
+Append new columns:
+
+* bug_type
+* bug_description
+* root_cause
+* fix_description
+* severity
+* bug_pattern
+* affected_component
+* confidence_score
+
+Write results to a new dataset file.
+
+Never overwrite the original dataset.
+
+Read and strictly follow all instructions from `refer.txt`.
+
+Context:
+
+* An existing dataset already exists in the project.
+* Do NOT create a new dataset.
+* Use the existing dataset as input.
+* Improve the dataset according to the rules defined in `refer.txt`.
+
+Requirements:
+
+1. Create a Python-based processing pipeline.
+2. Read the existing dataset from disk.
+3. Process the dataset in batches to avoid API rate limits and failures.
+4. Use Gemini API (or configurable LLM provider).
+5. Save progress after every batch.
+6. Implement checkpoint/resume functionality so processing can continue if interrupted.
+7. Retry failed API requests with exponential backoff.
+8. Log processing statistics.
+9. Preserve all existing columns.
+10. Add the new columns specified in `refer.txt`.
+11. Reclassify vague or incorrect bug types, especially entries labeled "other".
+12. Generate high-quality descriptions, root causes, fix descriptions, severity, and other enrichment fields defined in `refer.txt`.
+13. Validate JSON responses before writing them to the dataset.
+14. Handle malformed responses gracefully.
+15. Produce a final cleaned dataset file without overwriting the original dataset.
+
+Deliverables:
+
+* Processing script
+* Configuration file
+* Requirements file
+* Documentation for running the pipeline
+* Final enriched dataset output
+
+Always refer to `refer.txt` as the source of truth for classification rules and dataset enrichment requirements.

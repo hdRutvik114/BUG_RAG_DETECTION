@@ -1,0 +1,37 @@
+================================================================================
+SYSTEM ARCHITECTURE & CONTEXT BOUNDARY: MERN BUG MINER & AST VECTORIZER
+================================================================================
+
+1. OVERVIEW & GOAL:
+   A high-performance pipeline that crawls GitHub for MERN stack (JavaScript/TypeScript) 
+   bug-fix commits, parses git diffs into symmetrical buggy/fixed code hunks, 
+   generates 121-dimensional AST feature vectors using Node.js Babel parsing, 
+   heuristically classifies bugs into 12 balanced categories, and appends the 
+   enriched records into `dataset_enriched.csv`.
+
+2. FILE MAP & RESPONSIBILITIES:
+   ├── miner.py             # Main pipeline driver. Crawls GitHub Search & REST APIs,
+   │                        # extracts patch hunks using unidiff, classifies bugs, 
+   │                        # enforces 25-sample/category caps, appends to CSV.
+   ├── ast_vectorizer.py    # Python interface for AST extraction. Sends code snippets
+   │                        # as JSON payloads to js_ast_parser.js via subprocess.
+   │                        # Uses @lru_cache(maxsize=1024) to skip redundant parsing.
+   ├── js_ast_parser.js     # Node.js worker using @babel/parser. Recursively walks ASTs
+   │                        # with full TS/JSX/Decorator support and outputs node counts
+   │                        # and depth metrics to stdout as JSON.
+   ├── .env                 # API Credentials (GITHUB_TOKEN).
+   └── dataset_enriched.csv # Streaming output file (appended in real-time).
+
+3. TECHNICAL PROTOCOLS & DATA FLOW:
+   - Subprocess I/O: ast_vectorizer.py writes JSON `{"code": "...", "filename": "..."}` 
+     to stdio of js_ast_parser.js.
+   - Vector Specification: 121 Dimensions (106 AST Node Types + 15 Structural Metrics).
+     Normalized via L1 sum normalization.
+   - Parsing Plugin Rule: Decorators MUST use `["decorators", { legacy: true }]` tuple.
+   - CSV Persistence: Appends using `DictWriter(quoting=csv.QUOTE_ALL)`. Deduplicates 
+     existing commit hashes on startup to support incremental resume.
+
+4. EXECUTION CONSTRAINTS:
+   - Existing Python/JS code files are locked and MUST NOT be modified or refactored.
+   - API Rate Limits: Search API throttled with 2.0s sleep; REST API throttled with 0.2s sleep.
+================================================================================

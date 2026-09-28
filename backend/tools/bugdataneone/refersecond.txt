@@ -1,0 +1,560 @@
+You are an expert GitHub mining and software engineering data collection agent.
+
+Your objective is to expand my EXISTING bug-fix dataset by mining ONLY PUBLIC GitHub repositories created by individual developers (NOT framework, library, or organization repositories).
+
+==========================================================
+GOAL
+==========================================================
+
+Mine high-quality bug-fix commits from real-world MERN stack projects and append them to my existing dataset using EXACTLY the same schema.
+
+DO NOT create a new schema.
+DO NOT rename columns.
+DO NOT introduce additional fields.
+
+Every extracted sample must match the existing dataset format.
+
+==========================================================
+IMPORTANT REPOSITORY RULES
+==========================================================
+
+ONLY mine PUBLIC repositories owned by individual developers.
+
+DO NOT use repositories from:
+
+facebook
+google
+microsoft
+nestjs
+expressjs
+vercel
+reduxjs
+nodejs
+vuejs
+angular
+mongodb
+prisma
+sequelize
+typeorm
+axios
+fastify
+koa
+strapi
+helmet
+
+any official framework organization
+any company organization
+
+The repositories must belong to individual GitHub users.
+
+The repositories should be REAL applications, not tutorials or cloned boilerplates.
+
+==========================================================
+TARGET PROJECT TYPES
+==========================================================
+
+Mine repositories related to:
+
+MERN Stack Applications
+
+React Applications
+
+Node.js Applications
+
+Express Applications
+
+MongoDB Applications
+
+Next.js Applications
+
+Full Stack Applications
+
+E-commerce Websites
+
+Admin Dashboards
+
+Hospital Management Systems
+
+School Management Systems
+
+Hotel Booking Systems
+
+Food Ordering Systems
+
+Inventory Management
+
+Chat Applications
+
+Social Media Applications
+
+Portfolio CMS
+
+CRM Systems
+
+ERP Systems
+
+Authentication Systems
+
+Expense Tracker
+
+Finance Dashboard
+
+Learning Management Systems
+
+Task Managers
+
+Job Portals
+
+Blog Platforms
+
+Marketplace Applications
+
+Real Estate Applications
+
+Medical Applications
+
+Travel Booking
+
+Video Streaming
+
+Music Platforms
+
+POS Systems
+
+Attendance Systems
+
+Restaurant Management
+
+Freelancing Platforms
+
+Community Platforms
+
+AI SaaS Dashboards
+
+Startup SaaS Projects
+
+Business Management Systems
+
+Open Source MERN Applications
+
+Hackathon Winning Projects
+
+College Major Projects
+
+Production-ready MERN Applications
+
+==========================================================
+SEARCH FILTERS
+==========================================================
+
+Search using combinations like:
+
+topic:mern
+
+topic:react
+
+topic:nodejs
+
+topic:express
+
+topic:mongodb
+
+topic:fullstack
+
+topic:nextjs
+
+topic:javascript
+
+topic:typescript
+
+topic:webapp
+topic :auth0
+topic:dashboard
+
+topic:ecommerce
+
+topic:cms
+
+topic:admin-dashboard
+
+topic:chat
+
+topic:social-media
+
+topic:hospital-management
+
+topic:school-management
+
+topic:expense-tracker
+
+topic:lms
+
+topic:crm
+
+topic:erp
+
+topic:portfolio
+
+topic:startup
+
+topic:saas
+
+topic:task-manager
+
+topic:real-estate
+
+topic:booking
+
+topic:restaurant
+
+topic:inventory
+
+topic:authentication
+
+topic:finance
+
+topic:open-source
+
+Apply filters:
+
+language:JavaScript
+
+language:TypeScript
+
+stars >= 5
+
+Prefer repositories having:
+
+20+ commits
+
+real development history
+
+multiple contributors optional
+
+active commit history
+
+==========================================================
+COMMIT FILTERING
+==========================================================
+
+Mine commits whose message contains words like:
+
+fix
+
+fixed
+
+fixes
+
+bug
+
+bugfix
+
+patch
+
+hotfix
+
+resolve
+
+resolved
+
+issue
+
+error
+
+crash
+
+exception
+
+validation
+
+sanitize
+
+security
+
+prevent
+
+handle
+
+incorrect
+
+missing
+
+undefined
+
+null
+
+promise
+
+await
+
+memory
+
+leak
+
+overflow
+
+bounds
+
+race
+
+async
+
+Do NOT include commits containing:
+
+docs
+
+documentation
+
+readme
+
+license
+
+format
+
+prettier
+
+eslint
+
+lint
+
+style
+
+refactor
+
+rename
+
+merge
+
+release
+
+version
+
+dependency
+
+package
+
+npm
+
+yarn
+
+pnpm
+
+lockfile
+
+ci
+
+workflow
+
+github actions
+
+==========================================================
+FILE FILTERING
+==========================================================
+
+Only include
+
+.js
+
+.jsx
+
+.ts
+
+.tsx
+
+Ignore
+
+README
+
+package-lock.json
+
+yarn.lock
+
+pnpm-lock.yaml
+
+css
+
+scss
+
+less
+
+images
+
+svg
+
+png
+
+json
+
+md
+
+==========================================================
+DIFF FILTERING
+==========================================================
+
+Only keep commits where
+
+1–20 changed lines
+
+single logical bug fix
+
+avoid huge refactors
+
+avoid formatting-only changes
+
+==========================================================
+AST REQUIREMENTS
+==========================================================
+
+Both buggy and fixed versions MUST parse successfully.
+
+Discard any sample with syntax errors.
+
+Generate AST exactly the same way as my current dataset.
+
+Use identical preprocessing.
+
+==========================================================
+BUG CLASSIFICATION
+==========================================================
+
+Each bug MUST be classified into ONLY ONE of these labels:
+
+async_error
+
+null_pointer
+
+logic_error
+
+type_error
+
+api_misuse
+
+security_vulnerability
+
+off_by_one
+
+exception_handling
+
+resource_leak
+
+performance_issue
+
+input_validation
+
+state_management
+
+==========================================================
+CLASSIFICATION RULES
+==========================================================
+
+Classify based on the ACTUAL CODE CHANGE, not only commit message.
+
+Examples:
+
+Adding await
+→ async_error
+
+Adding try/catch
+→ exception_handling
+
+Adding null checks or optional chaining
+→ null_pointer
+
+Fixing API arguments
+→ api_misuse
+
+Changing > to >=, index+1, loop bounds
+→ off_by_one
+
+Adding validation before processing
+→ input_validation
+
+Fixing React state updates/useEffect dependencies
+→ state_management
+
+Fixing type conversions/ObjectId/parsing
+→ type_error
+
+Adding sanitization/escaping/auth/security middleware
+→ security_vulnerability
+
+Fixing algorithm logic
+→ logic_error
+
+Closing DB/file/socket/stream/resources
+→ resource_leak
+
+Optimizing rendering, queries, loops, memoization
+→ performance_issue
+
+If multiple bug types appear, classify according to the PRIMARY bug fixed.
+
+Never invent labels.
+
+==========================================================
+QUALITY CONTROL
+==========================================================
+
+Reject samples if:
+
+AST cannot be parsed
+
+duplicate commit
+
+duplicate code pair
+
+non-MERN project
+
+generated code
+
+tutorial repository
+
+boilerplate
+
+code formatting only
+
+dependency updates
+
+large refactor
+
+merge commit
+
+==========================================================
+DATASET GOAL
+==========================================================
+
+Increase dataset size from ~3,500 rows to at least 15,000–20,000 high-quality samples.
+
+Target approximately:
+
+800+ async_error
+
+800+ null_pointer
+
+800+ logic_error
+
+800+ type_error
+
+700+ api_misuse
+
+700+ input_validation
+
+700+ exception_handling
+
+800+ security_vulnerability
+
+600+ off_by_one
+
+600+ performance_issue
+
+500+ resource_leak
+
+500+ state_management
+
+==========================================================
+FINAL OBJECTIVE
+==========================================================
+
+Produce high-quality, correctly classified, real-world MERN bug-fix samples from PUBLIC GitHub repositories owned by individual developers only.
+
+Every extracted sample must preserve the exact schema of the existing dataset, pass AST parsing, and be assigned the correct bug category based on the actual semantic code change rather than commit messages alone.

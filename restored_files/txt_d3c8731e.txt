@@ -1,0 +1,166 @@
+# BugIdentifier: Code-RAG Automated Bug Detection & Program Repair Platform
+
+## 1. Executive Summary
+
+**BugIdentifier** is an intelligent Automated Program Repair (APR) and defect detection platform designed for JavaScript and TypeScript codebases. The system bridges static Abstract Syntax Tree (AST) analysis, Retrieval-Augmented Generation (Code-RAG), and Large Language Models (LLMs) to identify logic defects, boundary violations, and asynchronous errors, and automatically synthesize verifiable patches.
+
+---
+
+## 2. Technology Stack & Languages
+
+| Domain | Technology / Tool | Version / Details | Purpose |
+| :--- | :--- | :--- | :--- |
+| **Backend Language** | Python | `3.13` | API gateway, pipeline orchestration, vector retrieval, and repair agent. |
+| **Backend Web Framework** | FastAPI + Uvicorn | `FastAPI 0.115+`, `Uvicorn 0.46+` | High-performance asynchronous REST API and streaming endpoints. |
+| **Frontend Language** | JavaScript (ES6+), JSX | `Node.js 18+` | Client-side reactive dashboard and interactive workspace. |
+| **Frontend Framework** | React + Vite | `React 18.3`, `Vite 5.3` | Fast single-page application bundling and state management. |
+| **Styling & UI** | Tailwind CSS v4, Lucide Icons | `Tailwind v4.3`, `Lucide React` | Modern, responsive, human-made UI design system. |
+| **Code & Diff Editor** | Monaco Editor | `@monaco-editor/react 4.7` | Side-by-side split code diffing and syntax highlighting. |
+| **AST Parser & Analysis** | Babel Parser (`@babel/parser`, `@babel/traverse`) | Node.js Worker | Accurate JS/JSX/TS/TSX syntax tree generation and function slicing. |
+| **Machine Learning & RAG** | Scikit-Learn, NumPy, Pandas | Python Libraries | TF-IDF vectorization, AST matrix cosine similarity, and dataset indexing. |
+| **AI / LLM Engine** | Google Gemini SDK | `gemini-3.6-flash`, `gemini-2.5-flash` | Few-shot in-context learning patch synthesis and verification. |
+| **Database / Persistence** | MongoDB Atlas / Local Vector Cache | `pymongo`, In-Memory Index | Storage of historical bug-fix twins, telemetry ledger, and scan results. |
+| **Benchmark Dataset** | Mined Commit Pair CSV | 478 pairs (956 samples) | Ground truth database of real-world open-source bug-fix commits. |
+
+---
+
+## 3. High-Level System Architecture
+
+```mermaid
+graph TD
+    User["👤 Developer / User"]
+    
+    subgraph ClientLayer ["Client Layer (Frontend)"]
+        ReactApp["React 18 Dashboard (Vite)"]
+        Monaco["Monaco Side-by-Side Diff Viewer"]
+        Views["Summary, Explorer, & Telemetry Tabs"]
+    end
+    
+    subgraph APILayer ["API Gateway Layer (FastAPI :8000)"]
+        Router["FastAPI REST Router"]
+        UploadHandler["Git Clone & ZIP Handler"]
+        StreamEngine["SSE Progress Streaming Engine"]
+    end
+
+    subgraph CoreEngine ["Core Processing Engine"]
+        Orchestrator["Repository Scanner Orchestrator"]
+        BabelWorker["Babel AST Slicer (Node.js)"]
+        DeltaRAG["Delta-RAG Engine (Hybrid AST + TF-IDF)"]
+        Gatekeeper["Learned Confidence Gatekeeper"]
+        RepairAgent["Program Repair Agent (Gemini AI + Fallback)"]
+    end
+
+    subgraph DataStorage ["Data & Knowledge Layer"]
+        CSV["Historical Dataset (478 Bug-Fix Pairs)"]
+        Mongo["MongoDB Atlas / Local Cache"]
+    end
+
+    User -->|Git URL / ZIP / Code| ReactApp
+    ReactApp --> Router
+    Router --> UploadHandler
+    UploadHandler --> Orchestrator
+    Orchestrator --> BabelWorker
+    BabelWorker --> DeltaRAG
+    CSV --> DeltaRAG
+    DeltaRAG --> Gatekeeper
+    Gatekeeper -->|Candidate Defects| RepairAgent
+    Gatekeeper -->|Clean Functions| Orchestrator
+    RepairAgent --> Orchestrator
+    Orchestrator --> Mongo
+    Mongo --> Router
+    Router --> ReactApp
+```
+
+---
+
+## 4. End-to-End Processing & Data Flow
+
+```mermaid
+sequenceDiagram
+    autonumber
+    actor User as Developer
+    participant UI as React Frontend
+    participant API as FastAPI Gateway
+    participant AST as Babel AST Slicer
+    participant RAG as Delta-RAG Engine
+    participant LLM as Gemini Repair Agent
+    participant DB as Database / Cache
+
+    User->>UI: Submit Git Repo / ZIP Archive
+    UI->>API: POST /api/scan/repository
+    API->>AST: Extract JS/TS files & slice AST methods
+    AST-->>API: Array of standalone function chunks & 64-D vectors
+    
+    loop For each sliced function
+        API->>RAG: match_code_chunk(ast_vector, code_chunk)
+        RAG->>RAG: Compute Cosine Similarity (AST + TF-IDF)
+        alt Similarity < Threshold (Clean)
+            RAG-->>API: Verdict = CLEAN ($0 LLM Cost)
+        else Similarity >= Threshold (Suspicious)
+            RAG-->>API: Verdict = SUSPICIOUS + Matched Fix Twin
+            API->>LLM: verify_and_repair(target_code, delta_signature)
+            LLM-->>API: Synthesized Patch + Root Cause Explanation
+        end
+    end
+
+    API->>DB: Save complete scan results & telemetry ledger
+    API-->>UI: Return Scan Results JSON
+    UI->>User: Render Summary, Monaco Diff Editor, & Improvements
+```
+
+---
+
+## 5. Detailed Component Breakdown
+
+### 5.1 Babel AST Slicer (`backend/core/ast_slicer.py` & `backend/ast_parser.js`)
+* **Role**: Parses source files into Abstract Syntax Trees using `@babel/parser`.
+* **Operations**:
+  - Traverses AST nodes (`FunctionDeclaration`, `FunctionExpression`, `ArrowFunctionExpression`, `ClassMethod`).
+  - Extracts exact start/end line bounds and raw source code for each function.
+  - Generates numerical AST structural vectors and computes cyclomatic complexity.
+
+### 5.2 Delta-RAG Engine (`backend/core/delta_rag.py`)
+* **Role**: Matches sliced functions against 478 verified historical bug-fix pairs.
+* **Similarity Formula**:
+  $$\text{Score} = 0.40 \times \text{Cosine}(\mathbf{v}_{\text{target}}, \mathbf{v}_{\text{historical}}) + 0.60 \times \text{Cosine}(\mathbf{t}_{\text{target}}, \mathbf{t}_{\text{historical}}) + \text{Defect Heuristic Signals}$$
+* **Delta Signatures**: Extracts specific structural code transformations:
+  - Added boundary checks (`if (arr.length > 0)`)
+  - Added async/await operators (`await fetch()`)
+  - Nullish safety operators (`?.`, `??`)
+* **Learned Gatekeeper**: Filters clean methods locally before calling LLM APIs, saving cost and reducing latency.
+
+### 5.3 Program Repair Agent (`backend/core/repair_agent.py`)
+* **Role**: Synthesizes verified patches for flagged methods.
+* **Dual Execution Strategy**:
+  1. **Primary**: Google Gemini AI (`gemini-3.6-flash`) instructed with strict target-preservation prompts and historical Delta Signature blueprints.
+  2. **Fallback**: Deterministic AST refactoring engine for offline execution or quota resilience.
+
+### 5.4 Frontend Interface (`frontend/src/`)
+* **Views**:
+  1. **Summary & Improvements**: Executive health grade (A/B/C), quality score, defect breakdown, and actionable engineering best practices.
+  2. **Issues & Code Diff**: 3-column workspace with file hierarchy tree, side-by-side Monaco diff viewer, defect explanation, and 1-click patch application.
+  3. **Telemetry & Metrics**: Full observability ledger displaying all parsed methods, complexity, AST depth, and gatekeeper decisions.
+
+---
+
+## 6. How to Run the Platform
+
+### Single-Command Start (Backend + Frontend):
+```powershell
+python run_app.py
+```
+
+### Or Run in Separate Terminals:
+
+#### Terminal 1 — Backend (FastAPI):
+```powershell
+python -m uvicorn backend.main:app --host 127.0.0.1 --port 8000 --reload
+```
+*API Documentation:* `http://127.0.0.1:8000/docs`
+
+#### Terminal 2 — Frontend (React / Vite):
+```powershell
+cd frontend
+npm run dev
+```
+*Application Dashboard:* `http://localhost:5173`

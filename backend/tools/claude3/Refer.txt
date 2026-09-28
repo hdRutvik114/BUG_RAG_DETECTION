@@ -1,0 +1,825 @@
+Modify the existing BugFix Dataset Miner according to the following architecture.
+
+IMPORTANT: Do not redesign the entire project unnecessarily. Preserve the existing GitHub discovery, commit fetching, patch extraction, AST extraction, balancing, CSV writing, and resumability logic unless a change is required for the new semantic validation stage.
+
+The main change is:
+
+CURRENT PIPELINE:
+GitHub repository
+→ fix commit
+→ patch
+→ buggy/fixed snippet
+→ regex classification
+→ CSV
+
+NEW PIPELINE:
+GitHub repository
+→ fix commit
+→ patch
+→ extract COMPLETE buggy function
+→ extract COMPLETE fixed function
+→ CLEAN both functions
+→ Gemini semantic validation
+→ structured Gemini label
+→ validate Gemini response
+→ append validated record to CSV
+→ rate-limit delay
+→ next candidate
+
+==================================================
+
+1. GEMINI MUST BE THE SEMANTIC VALIDATOR
+   ==================================================
+
+The existing regex classifier must NOT be treated as the final authority for bug_type.
+
+Regex/pattern matching can still be used for:
+
+* candidate filtering
+* candidate prioritization
+* identifying potentially interesting commits
+* reducing unnecessary Gemini calls
+
+But the final bug_type must come from semantic analysis by the Gemini API.
+
+The purpose is to solve cases such as:
+
+ASYNC + DATABASE
+↓
+regex sees "await"
+↓
+might classify as async_error
+
+BUT the actual bug may be:
+↓
+NoSQL injection
+↓
+security_vulnerability
+
+Gemini must inspect what the code actually does and compare the buggy and fixed versions.
+
+Do NOT classify a record simply because keywords such as:
+
+* await
+* async
+* req.body
+* database
+* find()
+* try/catch
+* null
+* React
+  appear in the code.
+
+The model must determine the actual root cause of the change.
+
+==================================================
+2. SEND COMPLETE FUNCTIONS, NOT RANDOM DIFF SNIPPETS
+====================================================
+
+For every candidate patch, identify the enclosing function containing the changed lines.
+
+Extract:
+
+A. COMPLETE BUGGY FUNCTION
+from the parent commit/version before the fix.
+
+B. COMPLETE FIXED FUNCTION
+from the commit/version after the fix.
+
+Do NOT send only the changed lines if the complete enclosing function can be obtained.
+
+The function context is necessary for semantic understanding.
+
+Example:
+
+BUGGY:
+function getUser(req, res) {
+const user = await User.findOne(req.query);
+return res.json(user);
+}
+
+FIXED:
+function getUser(req, res) {
+const user = await User.findOne({
+username: String(req.query.username)
+});
+return res.json(user);
+}
+
+Gemini should understand that the important issue may be unsafe user-controlled database query construction rather than simply "async".
+
+==================================================
+3. REMOVE COMMENTS BEFORE SENDING TO GEMINI
+===========================================
+
+This is mandatory.
+
+Do NOT send comments to Gemini unless they are syntactically part of a string/template literal.
+
+Before creating the Gemini prompt, clean the extracted functions.
+
+Remove:
+
+* // single-line comments
+* /* block comments */
+* /** documentation comments */
+
+Do not remove:
+
+* strings
+* template literals
+* regular expressions
+* code inside the function
+
+The Gemini input should contain the actual executable code relevant to the bug, not repository comments or developer explanations.
+
+The cleaning process must NOT corrupt JavaScript/TypeScript syntax.
+
+If safe comment removal cannot be guaranteed for a particular function, prefer using a parser/tokenizer or a conservative cleaner rather than blindly applying a regex that could modify strings.
+
+==================================================
+4. GEMINI INPUT
+===============
+
+Send Gemini:
+
+* commit message
+* complete buggy function
+* complete fixed function
+* allowed bug categories
+
+Do not send:
+
+* the entire repository
+* unrelated files
+* unrelated functions
+* giant patches
+* unnecessary comments
+* unnecessary metadata
+
+Keep the prompt compact.
+
+The model should answer:
+
+"What is the actual semantic root cause of this bug fix?"
+
+==================================================
+5. APPROVED BUG CATEGORIES
+==========================
+
+Gemini MUST choose exactly one of these categories or "none":
+
+async_error
+null_pointer
+logic_error
+type_error
+api_misuse
+security_vulnerability
+off_by_one
+exception_handling
+resource_leak
+performance_issue
+input_validation
+state_management
+
+If none of these categories genuinely describes the bug, return:
+
+"none"
+
+Do NOT force a category.
+
+==================================================
+6. STRICT GEMINI OUTPUT SCHEMA
+==============================
+
+Gemini must return ONLY valid JSON.
+
+Expected schema:
+
+{
+"bug_type": "security_vulnerability",
+"confidence": 0.94,
+"bug_description": "The function uses attacker-controlled request data directly in a database query.",
+"root_cause": "Untrusted user input can alter the structure of the database query.",
+"fix_description": "The fix constrains and validates the user-controlled value before constructing the query.",
+"bug_pattern": "NoSQL injection",
+"severity": "high",
+"affected_component": "backend",
+"reason": "The semantic issue is unsafe user-controlled database input rather than asynchronous execution."
+}
+
+Allowed values:
+
+bug_type:
+
+* async_error
+* null_pointer
+* logic_error
+* type_error
+* api_misuse
+* security_vulnerability
+* off_by_one
+* exception_handling
+* resource_leak
+* performance_issue
+* input_validation
+* state_management
+* none
+
+confidence:
+
+* floating point number between 0.0 and 1.0
+
+severity:
+
+* low
+* medium
+* high
+* critical
+
+affected_component:
+
+* frontend
+* backend
+* database
+* api
+* fullstack
+* unknown
+
+reason:
+
+* short explanation of WHY this category represents the actual semantic root cause.
+
+==================================================
+7. GEMINI CLASSIFICATION RULE
+=============================
+
+Gemini must compare BEFORE and AFTER.
+
+The model should ask internally:
+
+1. What behavior was wrong before?
+2. What behavior changed?
+3. Why does the fix solve the problem?
+4. What is the actual root cause?
+5. Which approved category best describes that root cause?
+
+Do NOT classify based merely on the presence of a keyword.
+
+Example:
+
+BUGGY:
+
+async function getUser(req, res) {
+const user = await User.findOne(req.query);
+return res.json(user);
+}
+
+FIXED:
+
+async function getUser(req, res) {
+const username = String(req.query.username);
+const user = await User.findOne({ username });
+return res.json(user);
+}
+
+Even though both versions contain "async" and "await", the model should recognize that the important security issue is unsafe user-controlled database query construction.
+
+Therefore:
+
+bug_type = "security_vulnerability"
+
+NOT:
+
+bug_type = "async_error"
+
+==================================================
+8. DO NOT TRUST GEMINI BLINDLY
+==============================
+
+After receiving the Gemini response:
+
+1. Parse JSON.
+2. Validate every required field.
+3. Validate bug_type against APPROVED_BUG_TYPES.
+4. Validate confidence is between 0 and 1.
+5. Validate severity.
+6. Validate affected_component.
+7. Reject malformed responses.
+8. Reject "none".
+9. Reject low-confidence classifications according to a configurable threshold.
+
+Create a configuration variable:
+
+GEMINI_MIN_CONFIDENCE=0.80
+
+Only accept records where:
+
+confidence >= GEMINI_MIN_CONFIDENCE
+
+Do NOT silently convert invalid responses into another category.
+
+==================================================
+9. RATE LIMITING / DELAY
+========================
+
+This is mandatory.
+
+Do NOT continuously send requests as fast as possible.
+
+Create configurable settings such as:
+
+GEMINI_REQUEST_DELAY_SECONDS=6
+
+The miner must wait after every successful Gemini request before sending the next request.
+
+Example:
+
+Request 1
+→ Gemini response
+→ save result
+→ WAIT 6 seconds
+→ Request 2
+→ Gemini response
+→ save result
+→ WAIT 6 seconds
+→ Request 3
+
+Do not use a hardcoded delay throughout the code.
+
+Read it from .env/configuration.
+
+Example:
+
+GEMINI_REQUEST_DELAY_SECONDS=6
+
+Also support:
+
+GEMINI_MAX_RETRIES=2
+
+GEMINI_RETRY_DELAY_SECONDS=30
+
+==================================================
+10. HANDLE RATE LIMIT RESPONSES
+===============================
+
+If Gemini returns a rate-limit response such as HTTP 429:
+
+DO NOT discard the candidate.
+
+Instead:
+
+1. Log the rate-limit event.
+2. Wait according to retry/backoff configuration.
+3. Retry the request.
+4. If the current API key is exhausted, move to the next fallback API key.
+5. Continue processing.
+
+Use exponential backoff where appropriate.
+
+For example:
+
+attempt 1 → wait 30 sec
+attempt 2 → wait 60 sec
+attempt 3 → wait 120 sec
+
+Make these configurable.
+
+==================================================
+11. MULTIPLE GEMINI API KEYS
+============================
+
+Support multiple API keys for fallback.
+
+Do NOT hardcode API keys in Python.
+
+Use .env.
+
+Example:
+
+GEMINI_API_KEY_1=...
+GEMINI_API_KEY_2=...
+GEMINI_API_KEY_3=...
+GEMINI_API_KEY_4=...
+
+The program should load all available keys.
+
+Maintain a current-key index.
+
+Normal operation:
+
+KEY 1
+↓
+request
+↓
+response
+↓
+continue
+
+If KEY 1 receives a rate-limit/quota failure:
+
+KEY 2
+↓
+request
+↓
+continue
+
+Then:
+
+KEY 3
+↓
+request
+
+etc.
+
+Do NOT rotate keys randomly for every request.
+
+Use the current key until it is rate-limited or unavailable.
+
+If all keys are rate-limited, DO NOT endlessly hammer the API.
+
+Wait for a configurable cooldown period and then retry.
+
+Example:
+
+GEMINI_ALL_KEYS_COOLDOWN_SECONDS=300
+
+==================================================
+12. IMPORTANT: API LIMITS ARE CONFIGURATION, NOT ASSUMPTIONS
+============================================================
+
+Do not hardcode assumptions such as:
+
+"Gemini allows exactly 15 RPM"
+
+or
+
+"Gemini allows exactly 1000 requests/day"
+
+because quotas depend on model, API/account/project, region, billing status, and current Google limits.
+
+The program should react to actual API responses.
+
+Provide configurable limits such as:
+
+GEMINI_REQUEST_DELAY_SECONDS
+GEMINI_MAX_RETRIES
+GEMINI_RETRY_DELAY_SECONDS
+GEMINI_ALL_KEYS_COOLDOWN_SECONDS
+
+==================================================
+13. DAILY TARGET / BATCHING
+===========================
+
+The miner should support a target number of validated samples.
+
+Example:
+
+TARGET_VALIDATED_SAMPLES=100
+
+The program should continue mining until it produces 100 VALIDATED records for the current run/batch.
+
+Important:
+
+100 candidate rows != 100 validated rows.
+
+Only successfully validated Gemini records count toward the target.
+
+For example:
+
+120 candidates
+→ 20 rejected
+→ 100 valid
+→ stop.
+
+The final dataset should remain balanced according to the configured category caps.
+
+==================================================
+14. BALANCED DATASET
+====================
+
+Keep the existing CategoryBalancer.
+
+However, category balancing must happen AFTER semantic validation.
+
+Do not force Gemini to produce a category just because that category needs more samples.
+
+Gemini decides the true category.
+
+Then:
+
+if category quota available:
+save record
+
+else:
+reject/skip for current dataset target
+
+NEVER tell Gemini:
+
+"Choose security_vulnerability because we need more security samples."
+
+That would introduce label bias.
+
+==================================================
+15. CSV SCHEMA
+==============
+
+Extend the dataset schema with semantic-validation fields.
+
+Keep the existing fields:
+
+repository
+commit_hash
+file_path
+language
+bug_type
+original_commit_message
+buggy_code
+fixed_code
+buggy_ast_vector
+fixed_ast_vector
+ast_tier
+bug_description
+root_cause
+fix_description
+severity
+bug_pattern
+affected_component
+confidence_score
+match_margin
+label_source
+
+Add:
+
+gemini_model
+gemini_confidence
+gemini_reason
+gemini_validation_status
+gemini_api_key_slot
+gemini_attempts
+
+Example:
+
+gemini_model = "gemini-2.0-flash"
+gemini_confidence = 0.94
+gemini_reason = "The fix prevents attacker-controlled input from altering the database query."
+gemini_validation_status = "validated"
+gemini_api_key_slot = "key_1"
+gemini_attempts = 1
+
+Set:
+
+label_source = "gemini_semantic"
+
+for accepted semantic labels.
+
+The old regex-based label should NOT overwrite the Gemini label.
+
+==================================================
+16. PRESERVE AST DATA
+=====================
+
+Continue generating:
+
+buggy_ast_vector
+fixed_ast_vector
+
+Do not remove AST vectors.
+
+The eventual ML dataset should contain both:
+
+STRUCTURAL INFORMATION:
+AST vectors
+
+SEMANTIC INFORMATION:
+Gemini-derived labels/root cause/descriptions
+
+This combination is important for later experiments.
+
+==================================================
+17. RESUMABILITY
+================
+
+The miner must remain resumable.
+
+If the program stops:
+
+* already saved commits should not be reprocessed unnecessarily
+* already validated records should remain
+* API failures should not corrupt CSV
+* partial runs should be recoverable
+
+Do not load the entire dataset into memory just to append one row.
+
+Continue using incremental CSV writing.
+
+==================================================
+18. LOGGING
+===========
+
+Provide clear logs such as:
+
+[Candidate]
+Repository: owner/repo
+Commit: abc123
+Function: getUser
+
+[Gemini]
+Sending semantic validation request...
+Model: gemini-2.0-flash
+Key: key_1
+
+[Gemini]
+Response received.
+Category: security_vulnerability
+Confidence: 0.94
+
+[Dataset]
+Validated sample saved.
+Category: security_vulnerability
+Progress: 37/100
+
+[Rate Limit]
+Key 1 rate limited.
+Switching to key 2.
+
+[Wait]
+Sleeping 6 seconds before next request.
+
+==================================================
+19. IMPORTANT DATA QUALITY RULE
+===============================
+
+Do NOT blindly trust commit messages.
+
+A commit message such as:
+
+"fix async issue"
+
+does NOT automatically mean:
+
+async_error.
+
+Likewise:
+
+"fix security issue"
+
+does NOT automatically mean:
+
+security_vulnerability.
+
+The actual code change between buggy_code and fixed_code is the primary evidence.
+
+Commit message is supporting context only.
+
+==================================================
+20. FUNCTION EXTRACTION QUALITY
+===============================
+
+The biggest priority is getting the correct COMPLETE function.
+
+Do not send arbitrary 4-line diff snippets to Gemini when the changed lines belong to a larger function.
+
+The desired input is:
+
+complete buggy function
++
+complete fixed function
+
+with comments removed.
+
+If a reliable complete function cannot be extracted:
+
+mark the candidate as:
+
+gemini_validation_status = "insufficient_context"
+
+and do not count it toward the dataset target.
+
+Do NOT manufacture a function from incomplete fragments.
+
+==================================================
+21. FINAL ARCHITECTURE
+======================
+
+Implement the pipeline approximately as:
+
+GitHub Discovery
+↓
+Fix Commit Detection
+↓
+Patch Extraction
+↓
+Changed JS/TS File
+↓
+Complete Function Extraction
+↓
+Comment Removal
+↓
+AST Extraction
+↓
+Candidate Filtering
+↓
+Gemini Semantic Validation
+↓
+Strict JSON Parsing
+↓
+Schema Validation
+↓
+Confidence Threshold
+↓
+Category Balancer
+↓
+CSV Append
+↓
+Rate-limit Delay
+↓
+Next Candidate
+
+==================================================
+22. DO NOT BREAK EXISTING FEATURES
+==================================
+
+Preserve:
+
+* GitHub repository discovery
+* blacklist
+* topic/category search
+* commit filtering
+* patch parsing
+* AST extraction
+* AST reliability tier
+* category caps
+* repository caps
+* duplicate commit protection
+* incremental CSV writing
+* logging
+* resumability
+
+Only modify classification and extraction where necessary to implement semantic validation correctly.
+
+==================================================
+23. CONFIGURATION EXAMPLE
+=========================
+
+Add/update .env.example with:
+
+GEMINI_API_KEY_1=
+GEMINI_API_KEY_2=
+GEMINI_API_KEY_3=
+
+GEMINI_MODEL=gemini-2.0-flash
+
+GEMINI_REQUEST_DELAY_SECONDS=6
+GEMINI_MAX_RETRIES=2
+GEMINI_RETRY_DELAY_SECONDS=30
+GEMINI_ALL_KEYS_COOLDOWN_SECONDS=300
+
+GEMINI_MIN_CONFIDENCE=0.80
+
+TARGET_VALIDATED_SAMPLES=100
+
+Do not expose actual API keys in source code.
+
+==================================================
+24. FINAL VALIDATION
+====================
+
+After implementing the changes, test the pipeline with a small target such as:
+
+TARGET_VALIDATED_SAMPLES=5
+
+Do NOT immediately run thousands of records.
+
+Verify that:
+
+1. Complete functions are extracted.
+2. Comments are removed before Gemini.
+3. Buggy and fixed versions are both sent.
+4. Gemini returns strict JSON.
+5. Invalid JSON is rejected safely.
+6. Confidence threshold works.
+7. Rate delay happens after each request.
+8. HTTP 429 triggers retry/backoff.
+9. API key fallback works.
+10. CSV receives the Gemini-derived semantic label.
+11. AST vectors remain intact.
+12. Dataset balancing still works.
+13. Duplicate commits are not repeatedly processed.
+14. The miner can resume after interruption.
+
+Only after the 5-sample test succeeds should the pipeline be used for the larger 100-sample batches.
+
+IMPORTANT FINAL REQUIREMENT:
+
+Do not claim that the dataset is "semantically correct" merely because Gemini labeled it.
+
+Store the Gemini confidence, reason, model, and validation status so the dataset can later be manually audited.
+
+The goal is a high-quality research dataset where:
+
+AST = structural representation
+
+Gemini = semantic bug classification
+
+Human audit = final quality control
